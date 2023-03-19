@@ -1,4 +1,4 @@
-#!/bin/python3
+#!python
 
 from mss import mss
 from time import gmtime, sleep
@@ -145,9 +145,6 @@ def most_recent_ss_time():
 	# special case: it's empty
 	dir_contents = listdir(SCREENSHOTS_DIR)
 	if len(dir_contents) == 0:
-		return most_recent
-	# special case 2: only have a logfile
-	if (len(dir_contents) == 1) and (dir_contents[0] == LOGFILE_NAME):
 		return most_recent
 	
 	# otherwise there should be at least one screenshot here

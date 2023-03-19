@@ -3,38 +3,110 @@
 from mss import mss
 from time import gmtime, sleep
 from datetime import datetime, timedelta
-from os.path import isdir
+from os.path import isdir, isfile
 from os import listdir, makedirs
+from configparser import ConfigParser
 import random
 import logging
 import logging.config
 import re
 
-SCREENSHOTS_DIR = "/home/isomorph/AutoSS/"	# where are the screenshots saved?
-LOGFILE_NAME = "AutoSSLog.log"
-MIN_INTERVAL = timedelta(days=1)				# min time between screenshots
-MAX_INTERVAL = timedelta(days=7)				# max time between screenshots (approx)
-MIN_UPTIME_BEFORE_SHOT = timedelta(minutes=5)	# minimum running time before taking a screenshot. overrides max interval
+# ------------------------ do not edit above this line ---------------------------
+# change this dir if you move the config file location
+PATH_TO_CONFIG = '/home/isomorph/AutoSS/auto_ss.ini'
+# ------------------------ do not edit below this line ---------------------------
 
-# make our dir if it doesn't already exist
-ss_dir_had_to_be_made = False
+# set default logging settings in case there are any problems with setting up configs
+logger = logging.getLogger(__name__)
+log_formatter = logging.Formatter(fmt = '%(asctime)s, %(levelname)s: %(message)s', datefmt = '%Y-%m-%d %H:%M:%S %Z')
+log_init_err_handler = logging.FileHandler('./AUTO_SS_ERRORS.log')
+log_init_err_handler.setFormatter(log_formatter)
+logger.setLevel(logging.DEBUG)
+logger.addHandler(log_init_err_handler)
+
+
+# parse the config file
+REQUIRED_CFG_STUCTURE = {
+	'DEBUG':{},
+	'LOGGING':{},
+	'TIMING':{},
+	'DIRECTORIES':{
+		'PathToLogFile',
+		'PathToScreenshotsDir'
+	}
+}
+# verify config file exists first
+if not isfile(PATH_TO_CONFIG):
+	logger.critical("Cannot find config file {}.".format(PATH_TO_CONFIG))
+	exit(1)
+# set up parser
+cfgparse = ConfigParser()
+cfgparse.read(PATH_TO_CONFIG)
+# verify correct structure
+config_file_fields_all_present = True
+for sect in REQUIRED_CFG_STUCTURE:
+	if sect not in cfgparse:
+		logger.critical("Required section {} not found in config file {}.".format(sect,PATH_TO_CONFIG))
+		config_file_fields_all_present = False
+	else:
+		for key in REQUIRED_CFG_STUCTURE[sect]:
+			if key not in cfgparse[sect]:
+				logger.critical("Required key {} not found in config file ({}) section {}.".format(key,PATH_TO_CONFIG,sect))
+				config_file_fields_all_present = False
+
+if not config_file_fields_all_present:
+	logger.critical("Config file incomplete. Cannot start execution")
+	exit(1)
+
+# read the parsed data
+# DEBUG
+DEBUG_TIMES = cfgparse['DEBUG'].getboolean('UseDebugTiming',fallback=False)
+# LOGGING
+parsed_loglevel = cfgparse['LOGGING'].get('LogLevel',fallback='info')
+LOGGING_LEVEL = logging.INFO
+if 'info' == parsed_loglevel:
+	LOGGING_LEVEL = logging.INFO
+elif 'debug' == parsed_loglevel:
+	LOGGING_LEVEL = logging.DEBUG
+elif 'warning' == parsed_loglevel:
+	LOGGING_LEVEL = logging.WARNING
+elif 'error' == parsed_loglevel:
+	LOGGING_LEVEL = logging.ERROR
+elif 'critical' == parsed_loglevel:
+	LOGGING_LEVEL = logging.CRITICAL
+else:
+	logger.error("Unknown log level specification: {}. Defaulting to INFO".format(parsed_loglevel))
+# DIRECTORIES
+PATH_TO_LOGFILE = cfgparse['DIRECTORIES']['PathToLogFile']
+SCREENSHOTS_DIR = cfgparse['DIRECTORIES']['PathToScreenshotsDir']
+if '/' != SCREENSHOTS_DIR[-1]:
+	SCREENSHOTS_DIR += '/'
+# TIMING
+MIN_INTERVAL = timedelta(seconds=cfgparse['TIMING'].getfloat('MinTimeBetweenScreenshotsSec',fallback=86400))
+MAX_INTERVAL = timedelta(seconds=cfgparse['TIMING'].getfloat('MaxTimeBetweenScreenshotsSec',fallback=604800))
+MIN_UPTIME_BEFORE_SHOT = timedelta(seconds=cfgparse['TIMING'].getfloat('MinUptimeBeforeShotSec',fallback=300))
+CHECK_SCHEDULE_INTERVAL = timedelta(seconds=cfgparse['TIMING'].getfloat('TimeBetweenScheduleChecksSec',fallback=3600))
+	
+if DEBUG_TIMES:
+	MIN_INTERVAL = timedelta(seconds=10)
+	MAX_INTERVAL = timedelta(seconds=60)
+	MIN_UPTIME_BEFORE_SHOT = timedelta(seconds=30)
+	CHECK_SCHEDULE_INTERVAL = timedelta(seconds=5)
+
+# set up logging
+logger.removeHandler(log_init_err_handler)
+log_handler = logging.FileHandler(PATH_TO_LOGFILE)
+log_handler.setFormatter(log_formatter)
+logger.setLevel(LOGGING_LEVEL)
+logger.addHandler(log_handler)
+
+# make screenshots dir if it didn't exist already
 if not isdir(SCREENSHOTS_DIR):
 	# make it
 	makedirs(SCREENSHOTS_DIR)
-	ss_dir_had_to_be_made = True
+	logger.warning("Screenshot dir did not exist prior to startup. Created directory " + SCREENSHOTS_DIR)
 
-# set up logging
-logging.basicConfig(filename=SCREENSHOTS_DIR + LOGFILE_NAME,
-                    encoding='utf-8',
-                    level=logging.DEBUG,
-                    format='%(asctime)s, %(levelname)s: %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S %Z')
-
-                    
-if ss_dir_had_to_be_made:
-	logging.warning("Screenshot dir did not exist prior to startup. Created directory " + SCREENSHOTS_DIR)
-	
-logging.info("Auto-screenshot script started.")
+logger.info("Auto-screenshot script initialized.")
 # record start time
 script_start_time = datetime.now()
 
@@ -60,7 +132,7 @@ def take_ss():
 	NOTE: if this gives you problems you may need to switch from wayland to xorg
 	"""
 	filename = gen_filename()
-	logging.info("Taking screenshot " + filename)
+	logger.info("Taking screenshot " + filename)
 	with mss() as sct:
 		sct.shot(mon=-1,output=gen_filename())
 
@@ -96,51 +168,100 @@ def most_recent_ss_time():
 	return most_recent
 
 def gen_ss_delay(min_delay,max_delay):
-	return random.uniform(min_delay,max_delay)
+	return timedelta(seconds=random.uniform(min_delay,max_delay))
+	
+def get_startup_shot_time():
+	"""
+	handles the 'startup shot' timing which is done when the script starts running
+	"""
+	# first figure out what the most recent screenshot is -- initial special case
+	most_recent_ss = most_recent_ss_time()
 
-# perform initialization actions
-# first figure out what the most recent screenshot is -- initial special case
-most_recent_ss = most_recent_ss_time()
+	# figure out how long it's been since then
+	time_since_most_recent_ss = datetime.now() - most_recent_ss
 
-# figure out how long it's been since then
-time_since_most_recent_ss = datetime.now() - most_recent_ss
+	# figure out when the first screenshot will be
+	time_until_next_ss = 0.0 # seconds -- input to sleep()
+	# a few cases here:
+	# case 1: we've passed the max interval
+	if time_since_most_recent_ss > MAX_INTERVAL:
+		# delay the minimum time
+		logger.debug("Initial screenshot: case 1 (max interval passed at script init)")
+		time_until_next_ss = MIN_UPTIME_BEFORE_SHOT
 
-# figure out when the first screenshot will be
-time_until_next_ss = 0.0 # seconds -- input to sleep()
-# a few cases here:
-# case 1: we've passed the max interval
-if time_since_most_recent_ss > MAX_INTERVAL:
-	# delay the minimum time
-	logging.debug("Initial screenshot: case 1 (max interval passed at script init)")
-	time_until_next_ss = MIN_UPTIME_BEFORE_SHOT.total_seconds()
+	# case 2: we haven't massed the max, but if we wait for uptime we will (i.e. now + min uptime > most recent + max interval)
+	elif (script_start_time + MIN_UPTIME_BEFORE_SHOT) > (most_recent_ss + MAX_INTERVAL):
+		# delay the minimum time
+		logger.debug("Initial screenshot: case 2 (not past max yet, but waiting for uptime will pass it)")
+		time_until_next_ss = MIN_UPTIME_BEFORE_SHOT
 
-# case 2: we haven't massed the max, but if we wait for uptime we will (i.e. now + min uptime > most recent + max interval)
-elif (script_start_time + MIN_UPTIME_BEFORE_SHOT) > (most_recent_ss + MAX_INTERVAL):
-	# delay the minimum time
-	logging.debug("Initial screenshot: case 2 (not past max yet, but waiting for uptime will pass it)")
-	time_until_next_ss = MIN_UPTIME_BEFORE_SHOT.total_seconds()
+	# case 3: we haven't passed the max, and if we wait for the min uptime we still won't pass the max, but will pass the min
+	elif (most_recent_ss + MIN_INTERVAL) < (script_start_time + MIN_UPTIME_BEFORE_SHOT):
+		# treat min uptime as the new min interval
+		logger.debug("Initial screenshot: case 3 (not past max, but waiting for uptime will pass min)")
+		time_until_next_ss = gen_ss_delay(MIN_UPTIME_BEFORE_SHOT.total_seconds(),MAX_INTERVAL.total_seconds())
 
-# case 3: we haven't passed the max, and if we wait for the min uptime we still won't pass the max, but will pass the min
-elif (most_recent_ss + MIN_INTERVAL) < (script_start_time + MIN_UPTIME_BEFORE_SHOT):
-	# treat min uptime as the new min interval
-	logging.debug("Initial screenshot: case 3 (not past max, but waiting for uptime will pass min)")
-	time_until_next_ss = gen_ss_delay(MIN_UPTIME_BEFORE_SHOT.total_seconds(),MAX_INTERVAL.total_seconds())
+	# case 4: if we wait the min uptime we won't pass the min time between shots OR the max time
+	else:
+		logger.debug("Initial screenshot: case 4 (not past max, and waiting for uptime will not pass min)")
+		time_until_next_ss = gen_ss_delay(MIN_INTERVAL.total_seconds(), MAX_INTERVAL.total_seconds())
+	
+	return time_until_next_ss
 
-# case 4: if we wait the min uptime we won't pass the min time between shots OR the max time
-else:
-	logging.debug("Initial screenshot: case 4 (not past max, and waiting for uptime will not pass min)")
-	time_until_next_ss = gen_ss_delay(MIN_INTERVAL.total_seconds(), MAX_INTERVAL.total_seconds())
+def exe_check_delay(time_until_next):
+	"""
+	release CPU until the next time we need to check the schedfile
+	"""
+	if time_until_next <= CHECK_SCHEDULE_INTERVAL:
+		logger.debug("Next screenshot occurs before the check interval is up, delaying exact amount.")
+		sleep(time_until_next.total_seconds())
+	else:
+		logger.debug("Next screenshot occurs after the check interval is up, delaying for the check interval")
+		sleep(CHECK_SCHEDULE_INTERVAL.total_seconds())
 
-# begin initial delay
-logging.info("Beginning initial delay. Next screenshot will occur at {} (delay = {} sec)".format((script_start_time + timedelta(seconds=time_until_next_ss)), time_until_next_ss))
+def check_perform_ss(scheduled_time):
+	"""
+	check if it's time to take a shot (do so if it is) and return the time for the next shot and whether we took a shot
+	"""
+	
+	# for efficiency and consistency, record a universal "now"
+	time_now = datetime.now()
+	remain_time = scheduled_time - time_now
+	# case 1: the timer is expired
+	if remain_time <= timedelta(0):
+		# case 1a: we expired very recently (we likely WEREN'T interrupted by computer sleep)
+		if abs(remain_time) < CHECK_SCHEDULE_INTERVAL:
+			# take the shot now
+			take_ss()
+			# generate a new time
+			return time_now + gen_ss_delay(MIN_INTERVAL.total_seconds(), MAX_INTERVAL.total_seconds()), True
+		# case 1b: we expired but it was a while ago (we likely WERE interrupted by computer sleep)
+		else:
+			logger.debug("Detected timer overrun (presumably due to a computer sleep), delaying minimum amount.")
+			# take no shot, and delay the minimum amount
+			return time_now + MIN_UPTIME_BEFORE_SHOT, False
+	else:
+		# nothing to do, keep with the current time
+		return scheduled_time, False
+			
+		
+
+# ready initial screenshot delay (get time until and start the first delay)
+time_until_next = get_startup_shot_time()
+time_to_perform_next = datetime.now() + time_until_next # important distinction here -- since this is a real time it can tell us if we've overrun the timer
+logger.info("Beginning initial delay. Next screenshot scheduled for {} (delay = {}).".format(time_to_perform_next,time_until_next))
 
 # start loop
 while True:
 	# delay
-	sleep(time_until_next_ss)
-	# take screenshot
-	take_ss()
-	# calculate new delay
-	time_until_next_ss = gen_ss_delay(MIN_INTERVAL.total_seconds(), MAX_INTERVAL.total_seconds())
+	exe_check_delay(time_until_next)
+	# for evaluation purposes, record cycle time
+	cycle_start_time = datetime.now()
+	# check if we need to take a shot, and record when we take the next one
+	time_to_perform_next,shot_taken_this_cycle = check_perform_ss(time_to_perform_next)
+	time_until_next = time_to_perform_next - datetime.now()
 	# log next ss time
-	logging.info("Next screenshot at {} (delay = {} sec)".format(datetime.now() + timedelta(seconds=time_until_next_ss), time_until_next_ss))
+	if shot_taken_this_cycle:
+		logger.info("Next screeshot scheduled for {} (delay = {})".format(time_to_perform_next, time_until_next))
+	cycle_end_time = datetime.now()
+	

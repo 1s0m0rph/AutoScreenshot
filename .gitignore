@@ -1,2 +1,4 @@
 *.png
 *.log
+nohup.out
+shots/

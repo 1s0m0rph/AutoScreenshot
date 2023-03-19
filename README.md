@@ -34,11 +34,14 @@ This is how I have my windows set up (my data is on a bitlocker encrypted drive 
 
 1. Create a new task like you had an unencrypted drive, but don't add the trigger.
 2. Add a trigger with the following settings:
-  - Log: Microsoft-Windows-BitLocker-API/Management
-  - Source: <leave blank>
-  - Event ID: 782
-  - all checkboxes unticked EXCEPT 'Enabled'
+    - Log: Microsoft-Windows-BitLocker-API/Management
+    - Source: <leave blank>
+    - Event ID: 782 (this is the 'drive unlocked' event ID -- you can verify this using the Event Viewer)
+    - all checkboxes unticked EXCEPT 'Enabled'
+  
+  
 ![image](https://user-images.githubusercontent.com/32105556/226152751-da1dee7d-4e08-49b0-9325-8fa911bad9ca.png)
+
 
 When done, you should have a task that looks roughly like this:
 ![image](https://user-images.githubusercontent.com/32105556/226152777-29da30ec-6dfe-4178-90c9-f0750b4ced2d.png)

@@ -184,7 +184,7 @@ def get_startup_shot_time():
 	min_allowable_delay = max(MIN_UPTIME_BEFORE_SHOT, MIN_INTERVAL - time_since_most_recent_ss)
 	
 	# (b)log it
-	logger.debug("Initial screenshot, delay is {} to {}.".format(min_allowable_delay,max_allowable_delay))
+	logger.debug("Initial screenshot, minimum delay is {}. Maximum delay is {}.".format(min_allowable_delay,max_allowable_delay))
 	
 	# generate the delay
 	return gen_ss_delay(min_allowable_delay, max_allowable_delay)

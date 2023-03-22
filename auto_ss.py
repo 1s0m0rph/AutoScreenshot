@@ -13,7 +13,7 @@ import re
 
 # ------------------------ do not edit above this line ---------------------------
 # change this dir if you move the config file location
-PATH_TO_CONFIG = '/home/isomorph/AutoSS/auto_ss.ini'
+PATH_TO_CONFIG = r'./auto_ss.ini'
 # ------------------------ do not edit below this line ---------------------------
 
 # set default logging settings in case there are any problems with setting up configs
@@ -164,8 +164,8 @@ def most_recent_ss_time():
 	
 	return most_recent
 
-def gen_ss_delay(min_delay,max_delay):
-	return timedelta(seconds=random.uniform(min_delay,max_delay))
+def gen_ss_delay(min_delay:timedelta,max_delay:timedelta):
+	return timedelta(seconds=random.uniform(min_delay.total_seconds(), max_delay.total_seconds()))
 	
 def get_startup_shot_time():
 	"""
@@ -176,34 +176,18 @@ def get_startup_shot_time():
 
 	# figure out how long it's been since then
 	time_since_most_recent_ss = datetime.now() - most_recent_ss
-
-	# figure out when the first screenshot will be
-	time_until_next_ss = 0.0 # seconds -- input to sleep()
-	# a few cases here:
-	# case 1: we've passed the max interval
-	if time_since_most_recent_ss > MAX_INTERVAL:
-		# delay the minimum time
-		logger.debug("Initial screenshot: case 1 (max interval passed at script init)")
-		time_until_next_ss = MIN_UPTIME_BEFORE_SHOT
-
-	# case 2: we haven't massed the max, but if we wait for uptime we will (i.e. now + min uptime > most recent + max interval)
-	elif (script_start_time + MIN_UPTIME_BEFORE_SHOT) > (most_recent_ss + MAX_INTERVAL):
-		# delay the minimum time
-		logger.debug("Initial screenshot: case 2 (not past max yet, but waiting for uptime will pass it)")
-		time_until_next_ss = MIN_UPTIME_BEFORE_SHOT
-
-	# case 3: we haven't passed the max, and if we wait for the min uptime we still won't pass the max, but will pass the min
-	elif (most_recent_ss + MIN_INTERVAL) < (script_start_time + MIN_UPTIME_BEFORE_SHOT):
-		# treat min uptime as the new min interval
-		logger.debug("Initial screenshot: case 3 (not past max, but waiting for uptime will pass min)")
-		time_until_next_ss = gen_ss_delay(MIN_UPTIME_BEFORE_SHOT.total_seconds(),MAX_INTERVAL.total_seconds())
-
-	# case 4: if we wait the min uptime we won't pass the min time between shots OR the max time
-	else:
-		logger.debug("Initial screenshot: case 4 (not past max, and waiting for uptime will not pass min)")
-		time_until_next_ss = gen_ss_delay(MIN_INTERVAL.total_seconds(), MAX_INTERVAL.total_seconds())
 	
-	return time_until_next_ss
+	# figure out how long we're actually allowed to delay (if we want the max gap between shots to be MAX_INTERVAL, then we can't necessarily delay MAX_INTERVAL from right now)
+	max_allowable_delay = max(MIN_UPTIME_BEFORE_SHOT, MAX_INTERVAL - time_since_most_recent_ss)
+	
+	# figure out the smallest amount of time we're allowed to delay
+	min_allowable_delay = max(MIN_UPTIME_BEFORE_SHOT, MIN_INTERVAL - time_since_most_recent_ss)
+	
+	# (b)log it
+	logger.debug("Initial screenshot, delay is {} to {}.".format(min_allowable_delay,max_allowable_delay))
+	
+	# generate the delay
+	return gen_ss_delay(min_allowable_delay, max_allowable_delay)
 
 def exe_check_delay(time_until_next):
 	"""

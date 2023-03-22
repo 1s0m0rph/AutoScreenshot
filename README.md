@@ -8,9 +8,10 @@ This is intended to be used as a "run it all the time" script. You'll need a few
 0. install dependencies (python > 3.6 (tested using 3.10), mss ('pip install --user -U mss').
 1. clone this repo
 2. set up your config file however you want (be sure to make any directories you're trying to use)
-3. edit the location of the configuration ini file in the main script to whatever you set it to (don't edit outside the lines)
-4. Set up a task to run this script at startup
-5. reboot, and you should be up and running!
+3. Set up a task to run this script at startup
+4. reboot, and you should be up and running!
+
+Note that if you move the config ini file or rename it you need to update auto_ss.py so it knows where to look for it. Just don't edit outside the lines there and you'll be fine.
 
 # running the script automatically
 

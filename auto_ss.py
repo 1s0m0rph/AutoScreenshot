@@ -184,7 +184,7 @@ def get_startup_shot_time():
 	min_allowable_delay = max(MIN_UPTIME_BEFORE_SHOT, MIN_INTERVAL - time_since_most_recent_ss)
 	
 	# (b)log it
-	logger.debug("Initial screenshot, minimum delay is {}. Maximum delay is {}.".format(min_allowable_delay,max_allowable_delay))
+	logger.debug("Initial screenshot. Minimum delay is {}. Maximum delay is {}.".format(min_allowable_delay,max_allowable_delay))
 	
 	# generate the delay
 	return gen_ss_delay(min_allowable_delay, max_allowable_delay)
@@ -215,7 +215,7 @@ def check_perform_ss(scheduled_time):
 			# take the shot now
 			take_ss()
 			# generate a new time
-			return time_now + gen_ss_delay(MIN_INTERVAL.total_seconds(), MAX_INTERVAL.total_seconds()), True
+			return time_now + gen_ss_delay(MIN_INTERVAL, MAX_INTERVAL), True
 		# case 1b: we expired but it was a while ago (we likely WERE interrupted by computer sleep)
 		else:
 			logger.debug("Detected timer overrun (presumably due to a computer sleep), delaying minimum amount.")

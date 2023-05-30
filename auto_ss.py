@@ -232,17 +232,26 @@ time_until_next = get_startup_shot_time()
 time_to_perform_next = datetime.now() + time_until_next # important distinction here -- since this is a real time it can tell us if we've overrun the timer
 logger.info("Beginning initial delay. Next screenshot scheduled for {} (delay = {}).".format(time_to_perform_next,time_until_next))
 
-# start loop
-while True:
-	# delay
-	exe_check_delay(time_until_next)
-	# for evaluation purposes, record cycle time
-	cycle_start_time = datetime.now()
-	# check if we need to take a shot, and record when we take the next one
-	time_to_perform_next,shot_taken_this_cycle = check_perform_ss(time_to_perform_next)
-	time_until_next = time_to_perform_next - datetime.now()
-	# log next ss time
-	if shot_taken_this_cycle:
-		logger.info("Next screeshot scheduled for {} (delay = {})".format(time_to_perform_next, time_until_next))
-	cycle_end_time = datetime.now()
-	
+try:
+	# start loop
+	while True:
+		# delay
+		exe_check_delay(time_until_next)
+		# for evaluation purposes, record cycle time
+		cycle_start_time = datetime.now()
+		# check if we need to take a shot, and record when we take the next one
+		time_to_perform_next,shot_taken_this_cycle = check_perform_ss(time_to_perform_next)
+		time_until_next = time_to_perform_next - datetime.now()
+		# log next ss time
+		if shot_taken_this_cycle:
+			logger.info("Next screeshot scheduled for {} (delay = {})".format(time_to_perform_next, time_until_next))
+		cycle_end_time = datetime.now()
+except BaseException as e:
+	if (SystemExit == type(e)) and ("0" == str(e)):
+		# not an error, exit normally
+		exit(0)
+
+	logger.critical(f"Caught unhandled exception during runtime: {type(e).__name__}: {e}.")
+
+	# reraise exception after catching -- we just wanted a record of it
+	raise e

@@ -17,7 +17,9 @@ Note that if you move the config ini file or rename it you need to update auto_s
 
 ## Linux on unencrypted drive
 
-Use the crontab (`crontab -e`) with the following new line: `@reboot /path/to/cloned/repo/auto_ss.py`
+Use the crontab (`crontab -e`) with the following new line: `cd /path/to/cloned/repo/ && DISPLAY=:0 nohup /usr/bin/python3 auto_ss.py &`
+
+Note: due to the fact that the config ini is hardcoded in the path you do have to do the cd, and the DISPLAY=:0 is also necessary so that the screenshot subroutine is able to figure out what display to capture. Yours might not be :0. Pop open a terminal and run `echo $DISPLAY` to see what it actually is, then put the output of that after the `DISPLAY=` part instead of `:0` if you get errors in your log about display adapters.
 
 ## Windows
 
